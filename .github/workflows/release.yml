@@ -87,8 +87,10 @@ jobs:
         run: |
           mkdir -p dist
           cp "${{ matrix.bin }}" dist/
-          [ -f README.md ]   && cp README.md   dist/ || true
-          [ -f gpl-3.0.txt ] && cp gpl-3.0.txt dist/ || true
+          [ -f README.md ]      && cp README.md      dist/ || true
+          [ -f gpl-3.0.txt ]    && cp gpl-3.0.txt    dist/ || true
+          [ -f config.example ] && cp config.example dist/ || true
+          [ -d themes ]         && cp -R themes      dist/ || true
 
       - uses: actions/upload-artifact@v4
         with:

@@ -1,0 +1,34 @@
+# edrawk configuration. Copy to ~/.config/edrawk/config and edit.
+# Each setting shows its default; uncomment lines to override.
+# Lines starting with # are ignored. Inline `# comment` after a value is
+# stripped before parsing.
+
+# Indentation inserted by Tab and Enter-autoindent.
+#   spaces2 — two spaces
+#   spaces4 — four spaces (default)
+#   tab     — a literal hard tab
+# tab_mode: spaces4
+
+# Theme name. Resolves to <name>.theme in either
+#   ~/.config/edrawk/themes/   (user-local, first hit)
+#   <install-dir>/themes/      (alongside the binary)
+# Unknown / missing → falls back to the baked-in gruvbox-material-dark.
+# theme: default
+
+# Gutter line-number style.
+#   off      — no gutter
+#   global   — absolute line numbers (default)
+#   relative — distance from cursor (jump-friendly)
+# line_numbers: global
+
+# Default cursor mode at startup.
+#   insert — standard typing cursor (default)
+#   normal — read-only-style block cursor; Insert key toggles
+# cursor_mode: insert
+
+# Row count for the big-step motion: Ctrl+Up / Ctrl+Down / Ctrl+J / Ctrl+K.
+# Also the default step for the :j / :jump command's +N / -N forms.
+# cursor_jump_lines: 10
+
+# Editor font size in points. Clamped to 6..64.
+# font_size: 14
