@@ -1,73 +1,83 @@
-## edrawk — a rawk applet that wraps just the prawk-style text editor widget
-## from rawk-bufferlib. No tabs strip, tree, terminal, menubar — only the
-## editor in a panel.
+## edrawk — a rawk applet wrapping just the prawk-style text editor widget.
 ##
-## Usage: edrawk [path]
+## Layout: optional CL line at top (Alt+C to open), tab strip, editor body.
+## No menubar, tree, terminal, minimap, or git pane — that's prawk.
 
 import std/os
-import rawk_luigi
-import rawk_bufferlib
+import rawk_luigi, rawk_bufferlib
+import config, theme, editor_ref, editortabs, cl
 
-const palette = (
-  bg:             0x292828'u32,
-  fg:             0xd4be98'u32,
-  accent:         0x9253be'u32,
-  muted:          0x928374'u32,
-  urgent:         0xea6962'u32,
-  borderLight:    0x504945'u32,
-  borderDark:     0x32302f'u32,
-  separator:      0x45403d'u32,
-  codeKeyword:    0xd3869b'u32,
-  codeString:     0xd8a657'u32,
-  codeComment:    0x928374'u32,
-  codeNumber:     0xd3869b'u32,
-  codeOperator:   0xe78a4e'u32,
-  codeType:       0xa9b665'u32,
-  codeReturnType: 0x89b482'u32,
-)
+# ---------- argv ----------
 
-proc applyTheme() =
-  ui.theme.panel1           = palette.bg
-  ui.theme.panel2           = palette.borderLight
-  ui.theme.selected         = palette.accent
-  ui.theme.border           = palette.borderDark
-  ui.theme.text             = palette.fg
-  ui.theme.textDisabled     = palette.muted
-  ui.theme.textSelected     = palette.bg
-  ui.theme.buttonNormal     = palette.borderLight
-  ui.theme.buttonHovered    = palette.separator
-  ui.theme.buttonPressed    = palette.accent
-  ui.theme.buttonDisabled   = palette.borderDark
-  ui.theme.textboxNormal    = palette.borderLight
-  ui.theme.textboxFocused   = palette.separator
-  ui.theme.codeFocused      = palette.borderLight
-  ui.theme.codeBackground   = palette.bg
-  ui.theme.codeDefault      = palette.fg
-  ui.theme.codeComment      = palette.codeComment
-  ui.theme.codeString       = palette.codeString
-  ui.theme.codeNumber       = palette.codeNumber
-  ui.theme.codeOperator     = palette.codeOperator
-  ui.theme.codePreprocessor = palette.codeKeyword
-  setHighlightTheme(ExtraTheme(
-    codeKeyword:    palette.codeKeyword,
-    codeType:       palette.codeType,
-    codeReturnType: palette.codeReturnType,
-    urgent:         palette.urgent,
-    accent:         palette.accent))
+var startFile: string
+
+proc resolveArgv() =
+  if paramCount() == 0: return
+  let arg = paramStr(1)
+  if fileExists(arg):
+    startFile = absolutePath(arg)
+  elif not dirExists(arg):
+    # Doesn't exist yet — open as a new buffer at that path so :w will save.
+    startFile = absolutePath(arg)
+
+# ---------- shortcut callbacks ----------
+
+proc shortcutOpenCl(cp: pointer)     {.cdecl.} = openCl("")
+proc shortcutOpenFile(cp: pointer)   {.cdecl.} = openCl("open ")
+proc shortcutSave(cp: pointer)       {.cdecl.} = openCl("save")
+proc shortcutClose(cp: pointer)      {.cdecl.} = openCl("close")
+proc shortcutQuit(cp: pointer)       {.cdecl.} = openCl("quit")
+proc shortcutWrapToggle(cp: pointer) {.cdecl.} = editorWrapToggleActive()
+
+# ---------- main ----------
 
 initialise()
-applyTheme()
-loadFont()
+config.loadConfig()
+theme.activeTheme = config.themePref
+loadInitialTheme()
+loadFont(config.fontSize)
 loadAllSyntaxes()
+resolveArgv()
 
 let win = windowCreate(nil, 0, "edrawk", 900, 600)
 let root = panelCreate(addr win.e, PANEL_GRAY or PANEL_EXPAND)
-let editor = editorCreate(addr root.e,
-                          ELEMENT_V_FILL or ELEMENT_H_FILL,
-                          defaultHost())
 
-if paramCount() > 0:
-  editorOpenFile(editor, absolutePath(paramStr(1)))
+# Children of `root` are stacked vertically (no PANEL_HORIZONTAL on root).
+discard clCreate(addr root.e)
+discard editorTabsCreate(addr root.e)
+
+let host = EditorHost(
+  indentString:    proc(): string         = config.indentString(),
+  lineNumbers:     proc(): LineNumberMode = config.lineNumbers,
+  cursorMode:      proc(): CursorMode     = config.cursorMode,
+  cursorJumpLines: proc(): int            = config.cursorJumpLines,
+  recordOpen:      proc(p: string)        = discard,
+  onTabsChanged:   proc() =
+    if theEditorTabs != nil:
+      elementRepaint(addr theEditorTabs.e, nil))
+let editor = editorCreate(addr root.e,
+                          ELEMENT_V_FILL or ELEMENT_H_FILL, host)
+editor_ref.theEditor = editor
+
+if startFile.len > 0:
+  editorOpenFile(editor, startFile)
+
+# Window-level shortcuts. All Alt+letter chords either open the CL with a
+# prefilled command (mirroring Prawk's paletteJumpCb / paletteLockCb pattern)
+# or toggle a per-buffer setting. Ctrl-based motion + editing lives inside
+# the editor widget itself and isn't re-registered here.
+windowRegisterShortcut(win, Shortcut(
+  code: int(KEYCODE_LETTER('C')), alt: true, invoke: shortcutOpenCl))
+windowRegisterShortcut(win, Shortcut(
+  code: int(KEYCODE_LETTER('O')), alt: true, invoke: shortcutOpenFile))
+windowRegisterShortcut(win, Shortcut(
+  code: int(KEYCODE_LETTER('W')), alt: true, invoke: shortcutSave))
+windowRegisterShortcut(win, Shortcut(
+  code: int(KEYCODE_LETTER('Q')), alt: true, invoke: shortcutClose))
+windowRegisterShortcut(win, Shortcut(
+  code: int(KEYCODE_LETTER('Q')), alt: true, shift: true, invoke: shortcutQuit))
+windowRegisterShortcut(win, Shortcut(
+  code: int(KEYCODE_LETTER('Z')), alt: true, invoke: shortcutWrapToggle))
 
 elementFocus(addr editor.e)
 quit messageLoop()
