@@ -1,0 +1,4 @@
+nim gplv3 public
+https://github.com/ItsNotPaths/wayluigi.git
+https://github.com/ItsNotPaths/rawk-bufferlib.git
+https://github.com/ItsNotPaths/rawk-luigi.git

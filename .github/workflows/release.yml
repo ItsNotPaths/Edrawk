@@ -1,0 +1,137 @@
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag (e.g. v1.0.0)'
+        required: true
+        type: string
+      notes:
+        description: 'Release notes / body'
+        required: false
+        type: string
+        default: ''
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  PROJECT_NAME: edrawk
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flavor: x11
+            bin: edrawk
+            nim_define: ''
+            apt_packages: 'libx11-dev libfreetype-dev fontconfig'
+          - flavor: wayland
+            bin: edrawk-wayland
+            nim_define: '-d:wayland'
+            apt_packages: 'libwayland-dev libxkbcommon-dev libfreetype-dev fontconfig'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: '2.0.x'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache vendor/
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: vendor-linux-${{ hashFiles('download-deps.sh') }}
+
+      - name: Download deps
+        run: |
+          chmod +x ./download-deps.sh
+          ./download-deps.sh
+
+      - name: Install ${{ matrix.flavor }} dev headers
+        run: sudo apt-get update && sudo apt-get install -y ${{ matrix.apt_packages }}
+
+      - name: Install freetype Nim package
+        run: nimble install -y freetype@0.1.2
+
+      - name: Build (${{ matrix.flavor }})
+        run: |
+          nim c --opt:size -d:release -d:strip -d:lto \
+                ${{ matrix.nim_define }} \
+                --passC:-fno-pie --passL:-no-pie \
+                --passC:-ffunction-sections --passC:-fdata-sections \
+                --passC:-fno-asynchronous-unwind-tables \
+                --passC:-fno-unwind-tables \
+                --passL:-Wl,--gc-sections \
+                --passL:-Wl,--build-id=none \
+                --out:"${{ matrix.bin }}" src/edrawk.nim
+          strip --strip-all "${{ matrix.bin }}" || true
+
+      - name: Size guard (<=500KB)
+        run: |
+          BYTES=$(stat -c%s "${{ matrix.bin }}")
+          echo "binary size: ${BYTES}"
+          if [ "$BYTES" -gt 512000 ]; then
+            echo "binary exceeds 500KB budget (${BYTES} > 512000)" >&2
+            exit 1
+          fi
+
+      - name: Stage artifacts
+        run: |
+          mkdir -p dist
+          cp "${{ matrix.bin }}" dist/
+          [ -f README.md ]   && cp README.md   dist/ || true
+          [ -f gpl-3.0.txt ] && cp gpl-3.0.txt dist/ || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.flavor }}
+          path: dist
+
+  release:
+    needs: [build-linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-x11
+          path: linux-x11
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-wayland
+          path: linux-wayland
+
+      - name: Package
+        run: |
+          # actions/upload-artifact strips the exec bit on upload, so the
+          # downloaded trees come back mode 644. Restore +x on the binaries
+          # before zipping or users get 126 (Permission denied) on launch.
+          chmod +x "linux-x11/${PROJECT_NAME}" "linux-wayland/${PROJECT_NAME}-wayland"
+          (cd linux-x11     && zip -r "../${PROJECT_NAME}-linux-x11.zip"     .)
+          (cd linux-wayland && zip -r "../${PROJECT_NAME}-linux-wayland.zip" .)
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PRERELEASE_FLAG=""
+          if [ "${{ inputs.prerelease }}" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+          gh release create "${{ inputs.version }}" \
+              "${PROJECT_NAME}-linux-x11.zip" \
+              "${PROJECT_NAME}-linux-wayland.zip" \
+              --repo "${{ github.repository }}" \
+              --title "${{ inputs.version }}" \
+              --notes "${{ inputs.notes }}" \
+              $PRERELEASE_FLAG
