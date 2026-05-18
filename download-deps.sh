@@ -1,57 +1,65 @@
 #!/usr/bin/env bash
 # Fetches third-party deps into vendor/. Run once before building.
+#
+# Layout (flat — no nested vendor/<pkg>/vendor/):
+#   vendor/rawk-luigi/         Xrawk Nim FFI to wayluigi
+#   vendor/rawk-bufferlib/     Xrawk text-buffer + editor widget
+#   vendor/wayluigi/           luigi.h fork (rawk-luigi reads this via
+#                              -d:rawkLuigiVendor — see config.nims)
+#   vendor/wayluigi/freetype/  freetype headers for luigi.h's freetype path
+#
+# After fetching, registers rawk-luigi and rawk-bufferlib via `nimble develop`
+# and runs `nimble setup` so plain `nim c` resolves them through nimble.paths.
+# Idempotent — safe to re-run.
 set -euo pipefail
 
-VENDOR="$(cd "$(dirname "$0")" && pwd)/vendor"
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+VENDOR="$PROJECT_DIR/vendor"
 
-fetch() {
-    local name="$1"
-    local url="$2"
-    local dest="$3"
-    local strip="${4:-1}"
-    local filter="${5:-}"
-
-    if [ -d "$dest" ] && [ -n "$(ls -A "$dest" 2>/dev/null)" ]; then
-        echo "  already present: $(basename "$dest")"
-        return
-    fi
-
-    echo "  downloading $name..."
-    mkdir -p "$dest"
-    if [ -n "$filter" ]; then
-        curl -fsSL "$url" | tar xz --strip-components="$strip" -C "$dest" --wildcards "$filter"
+fetch_repo() {
+    local name="$1" url="$2"
+    local dest="$VENDOR/$name"
+    if [ -d "$dest/.git" ]; then
+        echo "  already present: $name"
     else
-        curl -fsSL "$url" | tar xz --strip-components="$strip" -C "$dest"
+        echo "  cloning $name..."
+        mkdir -p "$VENDOR"
+        git clone --depth=1 "$url" "$dest"
     fi
-    echo "  done."
 }
 
-echo "==> wayluigi"
-if [ -d "$VENDOR/wayluigi" ] && [ -n "$(ls -A "$VENDOR/wayluigi" 2>/dev/null)" ]; then
-    echo "  already present: wayluigi"
+echo "==> rawk-luigi (Xrawk Nim FFI to wayluigi)"
+fetch_repo "rawk-luigi" "https://github.com/ItsNotPaths/rawk-luigi.git"
+
+echo "==> rawk-bufferlib (Xrawk text-buffer + editor widget)"
+fetch_repo "rawk-bufferlib" "https://github.com/ItsNotPaths/rawk-bufferlib.git"
+
+echo "==> wayluigi (luigi.h fork — flat, not nested under rawk-luigi)"
+fetch_repo "wayluigi" "https://github.com/ItsNotPaths/wayluigi.git"
+
+echo "==> freetype headers (for luigi.h freetype path)"
+FT_HEADERS="$VENDOR/wayluigi/freetype"
+if [ -d "$FT_HEADERS" ] && [ -f "$FT_HEADERS/ft2build.h" ]; then
+    echo "  already present: freetype headers"
 else
-    echo "  cloning wayluigi..."
-    git clone --depth=1 "https://github.com/ItsNotPaths/wayluigi.git" "$VENDOR/wayluigi"
+    echo "  cloning freetype..."
+    TMP=$(mktemp -d)
+    git clone --depth=1 -q "https://gitlab.freedesktop.org/freetype/freetype.git" "$TMP/freetype"
+    mkdir -p "$FT_HEADERS"
+    cp -r "$TMP/freetype/include/." "$FT_HEADERS/"
+    rm -rf "$TMP"
     echo "  done."
 fi
 
-echo "==> rawk-bufferlib"
-if [ -d "$VENDOR/rawk-bufferlib" ] && [ -n "$(ls -A "$VENDOR/rawk-bufferlib" 2>/dev/null)" ]; then
-    echo "  already present: rawk-bufferlib"
-else
-    echo "  cloning rawk-bufferlib..."
-    git clone --depth=1 "https://github.com/ItsNotPaths/rawk-bufferlib.git" "$VENDOR/rawk-bufferlib"
-    echo "  done."
-fi
-
-echo "==> rawk-luigi"
-if [ -d "$VENDOR/rawk-luigi" ] && [ -n "$(ls -A "$VENDOR/rawk-luigi" 2>/dev/null)" ]; then
-    echo "  already present: rawk-luigi"
-else
-    echo "  cloning rawk-luigi..."
-    git clone --depth=1 "https://github.com/ItsNotPaths/rawk-luigi.git" "$VENDOR/rawk-luigi"
-    echo "  done."
-fi
+echo "==> registering develop links (nimble.paths)"
+# `nimble develop -a` is idempotent for same-path entries; if the user has
+# their own sibling-repo dev setup, the duplicate warning is harmless.
+# `nimble setup` then regenerates nimble.paths so plain `nim c` (used by
+# release.sh / CI) finds the deps via config.nims.
+( cd "$PROJECT_DIR" && \
+    nimble develop -a:"$VENDOR/rawk-luigi"      -y || true; \
+    nimble develop -a:"$VENDOR/rawk-bufferlib"  -y || true; \
+    nimble setup -y )
 
 echo ""
 echo "All deps ready."
