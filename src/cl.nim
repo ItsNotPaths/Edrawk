@@ -68,6 +68,23 @@ proc cmdQuit(c: ptr Cl, force: bool): bool =
     c.setError("quit: unsaved changes, use quit!"); return false
   quit(0)
 
+proc cmdJump(c: ptr Cl, arg: string): bool =
+  ## `:j +N` / `:j -N` jump relative; `:j N` jumps to absolute line N (1-based).
+  ## Mirrors Prawk's cmdJump.
+  if arg.len == 0:
+    c.setError("jump: missing line"); return false
+  if theEditor == nil: return false
+  try:
+    if arg[0] == '+':
+      editorJumpRelative(theEditor,  parseInt(arg[1 .. ^1]))
+    elif arg[0] == '-':
+      editorJumpRelative(theEditor, -parseInt(arg[1 .. ^1]))
+    else:
+      editorJumpAbsolute(theEditor,  parseInt(arg))
+    return true
+  except ValueError:
+    c.setError("jump: not a number: " & arg); return false
+
 proc dispatch(c: ptr Cl, raw: string): bool =
   ## Returns true if the CL should close after the command. False keeps it
   ## open so the user can see the error and edit.
@@ -89,6 +106,7 @@ proc dispatch(c: ptr Cl, raw: string): bool =
   of "wq!":
     if not cmdSave(c): return false
     return cmdQuit(c, force = true)
+  of "jump", "j":      return cmdJump(c, rest)
   else:
     c.setError("unknown command: " & head)
     return false

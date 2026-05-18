@@ -27,6 +27,7 @@ proc shortcutOpenFile(cp: pointer)   {.cdecl.} = openCl("open ")
 proc shortcutSave(cp: pointer)       {.cdecl.} = openCl("save")
 proc shortcutClose(cp: pointer)      {.cdecl.} = openCl("close")
 proc shortcutQuit(cp: pointer)       {.cdecl.} = openCl("quit")
+proc shortcutJump(cp: pointer)       {.cdecl.} = openCl("jump ")
 proc shortcutWrapToggle(cp: pointer) {.cdecl.} = editorWrapToggleActive()
 
 # ---------- main ----------
@@ -76,6 +77,8 @@ windowRegisterShortcut(win, Shortcut(
   code: int(KEYCODE_LETTER('Q')), alt: true, invoke: shortcutClose))
 windowRegisterShortcut(win, Shortcut(
   code: int(KEYCODE_LETTER('Q')), alt: true, shift: true, invoke: shortcutQuit))
+windowRegisterShortcut(win, Shortcut(
+  code: int(KEYCODE_LETTER('J')), alt: true, invoke: shortcutJump))
 windowRegisterShortcut(win, Shortcut(
   code: int(KEYCODE_LETTER('Z')), alt: true, invoke: shortcutWrapToggle))
 
