@@ -4,7 +4,7 @@
 
 import std/[os, strutils]
 import rawk_luigi, rawk_bufferlib
-import editor_ref, theme
+import editor_ref, theme, config
 
 const
   padX*: cint = 6
@@ -68,6 +68,34 @@ proc cmdQuit(c: ptr Cl, force: bool): bool =
     c.setError("quit: unsaved changes, use quit!"); return false
   quit(0)
 
+proc cmdTheme(c: ptr Cl, arg: string): bool =
+  if arg.len == 0:
+    c.setError("theme: missing name (try :themes for a list)"); return false
+  if not theme.loadThemeByName(arg):
+    c.setError("theme: not found: " & arg); return false
+  # Persist so the choice survives restart. setConfigKey creates the file
+  # if it doesn't exist yet, so a fresh install can `:theme zenburn` once
+  # and stick.
+  config.setConfigKey("theme", arg)
+  # Repaint every window — luigi caches palette-derived bits per element.
+  var w = cast[ptr Window](ui.windows)
+  while w != nil:
+    elementRepaint(addr w.e, nil)
+    w = w.next
+  true
+
+proc cmdThemes(c: ptr Cl): bool =
+  ## Dumps the discovered theme names into the CL's error line as info;
+  ## not literally an error, but it's the one status surface we have.
+  let names = theme.themeNames()
+  if names.len == 0:
+    c.setError("themes: none discovered"); return false
+  var parts: seq[string] = @[]
+  for n in names:
+    parts.add(if n == theme.activeTheme: "* " & n else: "  " & n)
+  c.setError("themes:  " & parts.join("   "))
+  false                                 # keep CL open so the user sees it
+
 proc cmdJump(c: ptr Cl, arg: string): bool =
   ## `:j +N` / `:j -N` jump relative; `:j N` jumps to absolute line N (1-based).
   ## Mirrors Prawk's cmdJump.
@@ -107,11 +135,19 @@ proc dispatch(c: ptr Cl, raw: string): bool =
     if not cmdSave(c): return false
     return cmdQuit(c, force = true)
   of "jump", "j":      return cmdJump(c, rest)
+  of "theme":          return cmdTheme(c, rest)
+  of "themes":         return cmdThemes(c)
   else:
     c.setError("unknown command: " & head)
     return false
 
 # ---------- open / close ----------
+
+proc clExecute*(line: string) =
+  ## Public dispatcher — runs a command line without opening the visible
+  ## CL. Lets the menubar reuse the same dispatch path as typed commands.
+  if theCl == nil: return
+  discard dispatch(theCl, line)
 
 proc clClose*(c: ptr Cl) =
   if c == nil or not isOpen(c): return

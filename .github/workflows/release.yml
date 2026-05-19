@@ -74,24 +74,46 @@ jobs:
         run: nimble install -y freetype@0.1.2
 
       - name: Build (${{ matrix.flavor }})
+        # Mirrors release.sh's --local flag set. Same trim spec the rawk
+        # suite (Prawk/Exrawk) uses:
+        #   -d:danger          — drops bounds/nil/overflow checks. Edrawk's
+        #                        writes go through saveAtomic (rawk-bufferlib
+        #                        editor.nim) so a silent crash can't corrupt
+        #                        files on disk.
+        #   -d:noSignalHandler — no Nim SIGSEGV/SIGINT handler (~3 KB).
+        #   --threads:off      — we never createThread.
+        #   --panics:on        — exceptions → panics; smaller .text.
+        #   --stackTrace:off /
+        #     --lineTrace:off  — drop file:line strings in tracebacks.
+        #   -fno-stack-protector / -Wl,-z,norelro — desktop tool, not a
+        #                        network daemon; canary + relro aren't
+        #                        material here and trim a few KB each.
         run: |
-          nim c --opt:size -d:release -d:strip -d:lto \
+          nim c --opt:size -d:danger -d:strip -d:lto \
+                -d:noSignalHandler \
+                --threads:off --panics:on \
+                --stackTrace:off --lineTrace:off \
                 ${{ matrix.nim_define }} \
                 --passC:-fno-pie --passL:-no-pie \
                 --passC:-ffunction-sections --passC:-fdata-sections \
                 --passC:-fno-asynchronous-unwind-tables \
                 --passC:-fno-unwind-tables \
+                --passC:-fno-stack-protector \
                 --passL:-Wl,--gc-sections \
                 --passL:-Wl,--build-id=none \
+                --passL:-Wl,-z,norelro \
                 --out:"${{ matrix.bin }}" src/edrawk.nim
           strip --strip-all "${{ matrix.bin }}" || true
 
-      - name: Size guard (<=500KB)
+      - name: Size guard (<=400 KB)
+        # Edrawk is the standalone editor — no parsetoml or tab/bookmark
+        # state machinery — so it should fit well under the 500 KB the
+        # workflow used to budget for. Tighten to surface regressions.
         run: |
           BYTES=$(stat -c%s "${{ matrix.bin }}")
           echo "binary size: ${BYTES}"
-          if [ "$BYTES" -gt 512000 ]; then
-            echo "binary exceeds 500KB budget (${BYTES} > 512000)" >&2
+          if [ "$BYTES" -gt 409600 ]; then
+            echo "binary exceeds 400 KB budget (${BYTES} > 409600)" >&2
             exit 1
           fi
 

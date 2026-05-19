@@ -5,7 +5,7 @@
 
 import std/os
 import rawk_luigi, rawk_bufferlib
-import config, theme, editor_ref, editortabs, cl
+import config, theme, editor_ref, editortabs, cl, menubar
 
 # ---------- argv ----------
 
@@ -44,6 +44,7 @@ let win = windowCreate(nil, 0, "Edrawk", 900, 600)
 let root = panelCreate(addr win.e, PANEL_GRAY or PANEL_EXPAND)
 
 # Children of `root` are stacked vertically (no PANEL_HORIZONTAL on root).
+let mb = menubarCreate(addr root.e)
 discard clCreate(addr root.e)
 discard editorTabsCreate(addr root.e)
 
@@ -81,6 +82,14 @@ windowRegisterShortcut(win, Shortcut(
   code: int(KEYCODE_LETTER('J')), alt: true, invoke: shortcutJump))
 windowRegisterShortcut(win, Shortcut(
   code: int(KEYCODE_LETTER('Z')), alt: true, invoke: shortcutWrapToggle))
+
+# Menubar shortcuts — Alt+F / Alt+V mirror Prawk and Exrawk muscle memory.
+windowRegisterShortcut(win, Shortcut(
+  code: int(KEYCODE_LETTER('F')), alt: true,
+  invoke: openFileMenuCb, cp: cast[pointer](mb)))
+windowRegisterShortcut(win, Shortcut(
+  code: int(KEYCODE_LETTER('V')), alt: true,
+  invoke: openViewMenuCb, cp: cast[pointer](mb)))
 
 elementFocus(addr editor.e)
 quit messageLoop()

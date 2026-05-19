@@ -19,9 +19,10 @@ proc indentString*(): string =
   of tmTab:     "\t"
 
 proc configDir*(): string = getConfigDir() / "edrawk"
+proc configPath*(): string = configDir() / "config"
 
 proc loadConfig*() =
-  let path = configDir() / "config"
+  let path = configPath()
   if not fileExists(path): return
   for raw in lines(path):
     let line = raw.strip()
@@ -64,3 +65,35 @@ proc loadConfig*() =
         if n >= 6 and n <= 64: fontSize = uint32(n)
       except ValueError: discard
     else: discard
+
+# ---------- persistence ----------
+
+proc atomicWrite(path, body: string) =
+  let tmp = path & ".tmp"
+  writeFile(tmp, body)
+  moveFile(tmp, path)
+
+proc setConfigKey*(key, value: string) =
+  ## Find/replace the `<key>:` line in the user's config (preserving
+  ## leading whitespace), or append it if missing. Atomic via temp+rename
+  ## so a crash mid-write can't truncate the file. Creates the file if
+  ## it doesn't exist yet — handy for first-run theme switches before
+  ## the user has touched `~/.config/edrawk/config` themselves.
+  let path = configPath()
+  createDir(configDir())
+  var lines: seq[string] = @[]
+  if fileExists(path):
+    for l in lines(path): lines.add(l)
+  var found = false
+  let prefix = key & ":"
+  for i in 0 ..< lines.len:
+    let stripped = lines[i].strip(leading = true, trailing = false)
+    if stripped.startsWith(prefix):
+      let indent = lines[i][0 ..< lines[i].len - stripped.len]
+      lines[i] = indent & key & ": " & value
+      found = true
+      break
+  if not found:
+    if lines.len > 0 and lines[^1].len > 0: lines.add("")
+    lines.add(key & ": " & value)
+  atomicWrite(path, lines.join("\n") & "\n")
