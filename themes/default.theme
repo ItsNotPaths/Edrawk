@@ -1,6 +1,6 @@
 # Gruvbox Material Dark — sourced from sainnhe's Sublime Text scheme
 # (Gruvbox Material Theme.sublime-package -> Gruvbox Material Dark.sublime-color-scheme).
-# Matches the palette baked into edrawk's theme.nim so you can edit it
+# Matches the palette baked into Edrawk's theme.nim so you can edit it
 # without rebuilding.
 bg:            #292828
 fg:            #d4be98

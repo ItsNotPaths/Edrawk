@@ -1,4 +1,4 @@
-## edrawk — a rawk applet wrapping just the prawk-style text editor widget.
+## Edrawk — a rawk applet wrapping just the prawk-style text editor widget.
 ##
 ## Layout: optional CL line at top (Alt+C to open), tab strip, editor body.
 ## No menubar, tree, terminal, minimap, or git pane — that's prawk.
@@ -40,7 +40,7 @@ loadFont(config.fontSize)
 loadAllSyntaxes()
 resolveArgv()
 
-let win = windowCreate(nil, 0, "edrawk", 900, 600)
+let win = windowCreate(nil, 0, "Edrawk", 900, 600)
 let root = panelCreate(addr win.e, PANEL_GRAY or PANEL_EXPAND)
 
 # Children of `root` are stacked vertically (no PANEL_HORIZONTAL on root).
