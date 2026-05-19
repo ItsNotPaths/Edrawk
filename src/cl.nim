@@ -18,7 +18,13 @@ type Cl* = object
   error*: string         # last dispatch error; cleared on next keystroke
   injected*: bool        # buffer was prefilled (not user-typed); border tints
 
-var theCl*: ptr Cl
+var
+  theCl*: ptr Cl
+  clOnOpenCb*, clOnCloseCb*: proc() {.closure.}
+    ## Layout hooks fired when the CL toggles visibility. Edrawk uses these
+    ## to swap the menubar out of the way so the CL occupies its row
+    ## instead of pushing the tab strip down. Callbacks should toggle
+    ## ELEMENT_HIDE only; the CL itself handles the parent refresh.
 
 # ---------- height / visibility ----------
 
@@ -113,6 +119,41 @@ proc cmdJump(c: ptr Cl, arg: string): bool =
   except ValueError:
     c.setError("jump: not a number: " & arg); return false
 
+proc splitOnAnd*(s: string): seq[string] =
+  ## Splits `s` on `&&` outside single/double quotes. Each segment is
+  ## whitespace-trimmed; empty ones are dropped. Lets a single CL line
+  ## chain commands (`save && quit`, `open foo.txt && jump 100`).
+  result = @[]
+  var cur = ""
+  var inSingle = false
+  var inDouble = false
+  var i = 0
+  while i < s.len:
+    let c = s[i]
+    if inSingle:
+      cur.add(c)
+      if c == '\'': inSingle = false
+      inc i
+    elif inDouble:
+      cur.add(c)
+      if c == '"': inDouble = false
+      elif c == '\\' and i + 1 < s.len:
+        cur.add(s[i + 1]); inc i
+      inc i
+    elif c == '\'':
+      cur.add(c); inSingle = true; inc i
+    elif c == '"':
+      cur.add(c); inDouble = true; inc i
+    elif c == '&' and i + 1 < s.len and s[i + 1] == '&':
+      let t = cur.strip()
+      if t.len > 0: result.add(t)
+      cur = ""
+      i += 2
+    else:
+      cur.add(c); inc i
+  let t = cur.strip()
+  if t.len > 0: result.add(t)
+
 proc dispatch(c: ptr Cl, raw: string): bool =
   ## Returns true if the CL should close after the command. False keeps it
   ## open so the user can see the error and edit.
@@ -143,15 +184,28 @@ proc dispatch(c: ptr Cl, raw: string): bool =
 
 # ---------- open / close ----------
 
+proc dispatchChain(c: ptr Cl, raw: string): bool =
+  ## Run an `&&`-chain segment by segment. Stops on the first segment that
+  ## returns false (error or status-display like `:themes`) so the user
+  ## sees the failure context instead of marching on. Returns true only
+  ## when every segment succeeded — the close decision in the Enter
+  ## handler / clExecute uses that.
+  let segs = splitOnAnd(raw)
+  if segs.len == 0: return true
+  for seg in segs:
+    if not dispatch(c, seg): return false
+  true
+
 proc clExecute*(line: string) =
   ## Public dispatcher — runs a command line without opening the visible
   ## CL. Lets the menubar reuse the same dispatch path as typed commands.
   if theCl == nil: return
-  discard dispatch(theCl, line)
+  discard dispatchChain(theCl, line)
 
 proc clClose*(c: ptr Cl) =
   if c == nil or not isOpen(c): return
   c.e.flags = c.e.flags or ELEMENT_HIDE
+  if clOnCloseCb != nil: clOnCloseCb()
   c.buf.setLen(0)
   c.cursor = 0
   c.error.setLen(0)
@@ -174,6 +228,7 @@ proc openCl*(prefill: string = "") =
   c.injected = prefill.len > 0
   if (c.e.flags and ELEMENT_HIDE) != 0:
     c.e.flags = c.e.flags and not ELEMENT_HIDE
+    if clOnOpenCb != nil: clOnOpenCb()
     elementRefresh(c.e.parent)
   elementFocus(addr c.e)
   elementRepaint(addr c.e, nil)
@@ -250,7 +305,7 @@ proc clMessage(element: ptr Element, message: Message, di: cint, dp: pointer): c
       return 1
     if code == int(KEYCODE_ENTER):
       let line = c.buf
-      let shouldClose = dispatch(c, line)
+      let shouldClose = dispatchChain(c, line)
       if shouldClose: clClose(c)
       return 1
     if code == int(KEYCODE_BACKSPACE):

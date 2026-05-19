@@ -243,4 +243,13 @@ proc menubarCreate*(parent: ptr Element, flags: uint32 = 0): ptr Menubar =
   mb.items[1] = MenuItem(label: cstring"View")
   mb.hovered = -1
   theMenubar = mb
+  # CL takes our row when it opens — hide the menubar so the layout collapses
+  # us instead of stacking the CL underneath. Both bars are the same height,
+  # so the tab strip stays put.
+  cl.clOnOpenCb = proc() =
+    if theMenubar != nil:
+      theMenubar.e.flags = theMenubar.e.flags or ELEMENT_HIDE
+  cl.clOnCloseCb = proc() =
+    if theMenubar != nil:
+      theMenubar.e.flags = theMenubar.e.flags and not ELEMENT_HIDE
   return mb
