@@ -5,7 +5,7 @@
 
 import std/os
 import rawk_luigi, rawk_bufferlib
-import config, theme, editor_ref, editortabs, cl, menubar
+import config, theme, editor_ref, editortabs, cl, menubar, follow
 
 # ---------- argv ----------
 
@@ -29,6 +29,8 @@ proc shortcutClose(cp: pointer)      {.cdecl.} = openCl("close")
 proc shortcutQuit(cp: pointer)       {.cdecl.} = openCl("quit")
 proc shortcutJump(cp: pointer)       {.cdecl.} = openCl("jump ")
 proc shortcutWrapToggle(cp: pointer) {.cdecl.} = editorWrapToggleActive()
+proc shortcutFollow(cp: pointer)     {.cdecl.} = followUnderCursor(replace = false)
+proc shortcutFollowAlt(cp: pointer)  {.cdecl.} = followUnderCursor(replace = true)
 
 # ---------- main ----------
 
@@ -82,6 +84,12 @@ windowRegisterShortcut(win, Shortcut(
   code: int(KEYCODE_LETTER('J')), alt: true, invoke: shortcutJump))
 windowRegisterShortcut(win, Shortcut(
   code: int(KEYCODE_LETTER('Z')), alt: true, invoke: shortcutWrapToggle))
+# Alt+Enter: follow under the caret — [[link]] / file path opens; Shift opens
+# in place. (No symbol goto-def here; that needs Prawk's grep + results pane.)
+windowRegisterShortcut(win, Shortcut(
+  code: int(KEYCODE_ENTER), alt: true, invoke: shortcutFollow))
+windowRegisterShortcut(win, Shortcut(
+  code: int(KEYCODE_ENTER), alt: true, shift: true, invoke: shortcutFollowAlt))
 
 # Menubar shortcuts — Alt+F / Alt+V mirror Prawk and Exrawk muscle memory.
 windowRegisterShortcut(win, Shortcut(

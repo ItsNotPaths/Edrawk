@@ -2,7 +2,7 @@
 ## reveals it focused, with the buffer pre-loaded. Esc cancels, Enter
 ## dispatches to a fixed set of editor commands (open / save / close / quit).
 
-import std/[os, strutils]
+import std/[os, strutils, osproc]
 import rawk_luigi, rawk_bufferlib
 import editor_ref, theme, config
 
@@ -119,6 +119,39 @@ proc cmdJump(c: ptr Cl, arg: string): bool =
   except ValueError:
     c.setError("jump: not a number: " & arg); return false
 
+proc cmdPut(c: ptr Cl, cmd: string): bool =
+  ## `put <cmd>` — run <cmd> in the shell and insert its output into the
+  ## buffer at the caret(s). Ported from Prawk, but synchronous: Edrawk has
+  ## no async shell, so a long-running command blocks the UI until it exits.
+  if cmd.len == 0:
+    c.setError("put: missing command"); return false
+  if theEditor == nil: return false
+  let (output, _) = execCmdEx(cmd)
+  editorInsertText(theEditor, output.strip(leading = false, chars = {'\n'}))
+  true
+
+proc cmdPipeout(c: ptr Cl, cmd: string): bool =
+  ## `pipeout <cmd>` — feed the selection in as stdin, run <cmd> over it, and
+  ## replace the selection with the output. The selection goes through a temp
+  ## file so pipelines redirect correctly: `( <cmd> ) < tmp`. Synchronous.
+  if cmd.len == 0:
+    c.setError("pipeout: missing command"); return false
+  if theEditor == nil: return false
+  let sel = editorSelectionText(theEditor)
+  if sel.len == 0:
+    c.setError("pipeout: no selection"); return false
+  let tmp = getTempDir() / ("edrawk-pipe-" & $getCurrentProcessId() & ".tmp")
+  try:
+    writeFile(tmp, sel)
+    let (output, _) = execCmdEx("( " & cmd & " ) < " & quoteShell(tmp))
+    editorReplaceSelection(theEditor, output.strip(leading = false, chars = {'\n'}))
+  except IOError, OSError:
+    c.setError("pipeout: io error"); return false
+  finally:
+    try: removeFile(tmp)
+    except OSError: discard
+  true
+
 proc splitOnAnd*(s: string): seq[string] =
   ## Splits `s` on `&&` outside single/double quotes. Each segment is
   ## whitespace-trimmed; empty ones are dropped. Lets a single CL line
@@ -176,6 +209,8 @@ proc dispatch(c: ptr Cl, raw: string): bool =
     if not cmdSave(c): return false
     return cmdQuit(c, force = true)
   of "jump", "j":      return cmdJump(c, rest)
+  of "put":            return cmdPut(c, rest)
+  of "pipeout":        return cmdPipeout(c, rest)
   of "theme":          return cmdTheme(c, rest)
   of "themes":         return cmdThemes(c)
   else:

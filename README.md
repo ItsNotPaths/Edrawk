@@ -27,6 +27,8 @@ motion, etc.). Edrawk adds:
 | `Alt+J` | Inject `jump ` |
 | `Alt+Z` | Toggle soft-wrap on the active buffer |
 | `Alt+F` / `Alt+V` | File / View menu |
+| `Alt+Enter` | Follow under caret: `[[link]]` → note, file path → open it |
+| `Alt+Shift+Enter` | Same, opening in the current tab instead of a new one |
 | `Esc` | Close the CL (if open), keep buffer focus |
 
 ## Commands
@@ -42,7 +44,12 @@ the CL open with the message highlighted; clean runs auto-close.
 | `quit` / `q` / `quit!` / `q!` | Quit (force = ignore dirty) |
 | `wq` / `wq!` | Save then quit |
 | `jump <N>` / `j <N>` / `j +N` / `j -N` | Absolute / relative line jump |
+| `put <cmd>` | Run `<cmd>`, insert its output at the caret(s) |
+| `pipeout <cmd>` | Pipe the selection through `<cmd>`, replace it with the output |
 | `theme <name>` / `themes` | Switch theme / list installed themes |
+
+`put`/`pipeout` run synchronously — a long command blocks the editor (no
+background shell). `Alt+Enter` resolves links and paths against the cwd.
 
 ## Config
 
