@@ -4,7 +4,7 @@ A minimal wayluigi-based text editor. Wraps the `rawk-bufferlib` editor widget
 with a tab strip and a one-line command-line. No tree, no terminal, no git
 pane — that's [Prawk](https://Github.com/ItsNotPaths/Prawk). Linux x86_64.
 
-![Edrawk](https://files.paths.place/edrawk-1.png)
+![Edrawk](https://files.paths.place/Edrawk-1.png)
 
 ## Run
 
